@@ -50,7 +50,12 @@ class TracRequestHandler(webapp.RequestHandler):
     
     def post(self):
         """Takes care of basic process of handling a TracRequest. Most subclasses of
-        this class shouldn't have to override the post() method"""
+        this class shouldn't have to override the post() method
+        
+        Trac requests must be accompanied by a 'token' parameter. This is used to
+        map to a Session object which is required to make a request to the remote 
+        Trac server"""
+        
         token = self.request.get('token')
         # TODO: need to explore the implications of the "eventually consistent"
         # datastore for this query which is not an "ancestor query" 
@@ -72,7 +77,6 @@ class TracRequestHandler(webapp.RequestHandler):
 
 
 def trac_error_to_response(err):
-
     return json.dumps({'success': False, 
                        'reason': {'errcode': err.code, 
                                   'errmsg' : err.msg }})
