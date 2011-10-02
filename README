@@ -1,7 +1,12 @@
 pawprint -- a mobile interface to your Trac
 
-I couldn't find any mobile interface to Trac, so I decided to write one myself. This project is broken into two main pieces: the JSON RPC library, which provides easy-to-use functions for making the RPC calls to Trac, and the Mobile App, which provides the UI and application logic for interacting with Trac.
+I couldn't find any mobile interface to Trac, so I decided to write one 
+myself. This project is broken into two main pieces: the Trac RPC library, 
+a google-app-engine app which provides easy-to-use web service-esque 
+functions for making authenticated RPC calls to Trac, and the Mobile App, which 
+provides the UI and application logic for interacting with Trac.
 
-The app is built atop Sencha Touch, providing an HTML 5 implementation for device agnostic viewing. Enjoy!
+The app is built atop Sencha Touch, providing an HTML 5 implementation for 
+device agnostic viewing. Enjoy!
 
 -- Ray
