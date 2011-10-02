@@ -1,7 +1,7 @@
-import uuid
 import logging
 import trac
 import json
+from uuid import uuid4
 from datetime import datetime, timedelta
 from google.appengine.ext import webapp
 from google.appengine.ext import db
@@ -90,7 +90,7 @@ def user_session(url, username, password):
                           trac_url=url,
                           username=username,
                           password=password,
-                          token=str(uuid.uuid4()),
+                          token=str(uuid4()),
                           expiry=(datetime.now() + valid_duration))
         session.put()
         logging.debug("stored a new user session")
@@ -121,15 +121,15 @@ def authenticate(session):
     AuthenticationError with an error code and message"""
     try:
         trac.proxy(session).system.getAPIVersion()
-    except ProtocolError as e:
+    except ProtocolError as e1:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise trac.AuthenticationError(code=e.errcode, msg=e.errmsg)
+        raise trac.AuthenticationError(code=e1.errcode, msg=e1.errmsg)
     except Fault as e2:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
         raise trac.AuthenticationError(code=e2.faultCode, msg=e2.faultString)
-    except ResponseError as e3:
+    except ResponseError:
         cleanup_session(session)
         raise trac.AuthenticationError(code='400', msg='Malformed Response -- server does not support RPC')
     except Error as e4:
@@ -142,5 +142,5 @@ def cleanup_session(session):
     trac.remove_proxy(session)
     try:
         session.delete()
-    except NotSavedError:
+    except db.NotSavedError:
         logging.error("tried removing a session that was not saved")

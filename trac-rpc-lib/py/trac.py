@@ -1,6 +1,6 @@
 import logging
 import json
-import auth
+from auth import Session
 from google.appengine.ext import webapp
 from xmlrpclib import ServerProxy
 from urlparse import urlparse, urlunparse
@@ -59,7 +59,7 @@ class TracRequestHandler(webapp.RequestHandler):
         token = self.request.get('token')
         # TODO: need to explore the implications of the "eventually consistent"
         # datastore for this query which is not an "ancestor query" 
-        session = Session.gqp("WHERE token = :t", t=token).get()
+        session = Session.gql("WHERE token = :t", t=token).get()
         
         try:
             if session == None:
@@ -67,13 +67,13 @@ class TracRequestHandler(webapp.RequestHandler):
             else:
                 # if we have a good session, call the handle function
                 # of the specific implementation of the TracRequestHandler
-                handle(proxy(session))
+                self.handle(proxy(session))
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
-            logger.error(str(te))
+            logging.error(str(te))
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(000, "Unknown error: {0}".format(str(e)))))
-            logger.error(str(e))
+            logging.error(str(e))
 
 
 def trac_error_to_response(err):

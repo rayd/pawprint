@@ -1,0 +1,15 @@
+To properly setup your dev environment, you need to:
+
+1.	Install the google appengine development server. See this
+	page for info: http://code.google.com/appengine/docs/python/gettingstarted/devenvironment.html
+
+2.	Set the ${google_app_engine} property on your PyDev project
+	so that PyDev will have the app engine libraries available.
+	Edit the .pydevproject file in the root of the trac-rpc-lib
+	folder and change this to reflect your system settings:
+	
+	<key>google_appengine_home</key>
+	<value>/home/ray/apps/google_appengine</value>
+	
+	
+Happy coding!
