@@ -124,17 +124,23 @@ def authenticate(session):
     except ProtocolError as e1:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise trac.AuthenticationError(code=e1.errcode, msg=e1.errmsg)
+        logging.error("error authenticating: {0}", str(e1))
+        raise trac.AuthenticationError(session.username)
     except Fault as e2:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise trac.AuthenticationError(code=e2.faultCode, msg=e2.faultString)
-    except ResponseError:
+        logging.error("error authenticating: {0}", str(e2))
+        raise trac.AuthenticationError(session.username)
+    except ResponseError as e3:
+        # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise trac.AuthenticationError(code='400', msg='Malformed Response -- server does not support RPC')
+        logging.error("error authenticating: {0}", str(e3))
+        raise trac.AuthenticationError(session.username)
     except Error as e4:
+        # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise trac.AuthenticationError(code='000', msg='Unknown error -- authentication failed {0}'.format(str(e4)))
+        logging.error("error authenticating: {0}", str(e4))
+        raise trac.AuthenticationError(session.username)
     return True
 
 
