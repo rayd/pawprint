@@ -1,6 +1,8 @@
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
-from auth import LoginService
+#from csfam.pawprint.auth import LoginService
+from csfam.pawprint.auth import LoginService
+
 
 application = webapp.WSGIApplication([
     ('/login', LoginService)

@@ -1,8 +1,8 @@
 application: trac-json-rpc-lib
-version: 1
+version: 1-0-snapshot
 runtime: python
 api_version: 1
 
 handlers:
 - url: /.*
-  script: py/app.py
+  script: csfam/pawprint/app.py
