@@ -4,7 +4,9 @@ Pawprint.Requestor = {
 	// mapping of known error codes to client-side explanations
 	ERROR_CODES: {
 		"401": "Username and/or password are incorrect",
-		"405": "The specified server does not support RPC",
-		"-32601": "This feature is not supported by your Trac server"
+		"404": "The specified Trac server cannot be found",
+		"405": "The specified Trac server does not support RPC",
+		"327": "This feature is not supported by your Trac server",
+		"317": "Your session has ended. Please login again."
 	}
 };

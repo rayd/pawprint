@@ -25,7 +25,9 @@ class LoginService(webapp.RequestHandler):
         
     failure:
         { "success": false,
-          "reason": "message explaining why auth failed"
+          "reason": { "errcode": "error code",
+                      "errmsg": "message explaining why auth failed"
+                    }
         }
     """
     def post(self):
@@ -37,11 +39,9 @@ class LoginService(webapp.RequestHandler):
 
         try:
             session = user_session(url, username, password)
-            resp = json.dumps({'success': True, 'token': session.token})
-            self.response.out.write(resp)
-        except AuthenticationError as e:
-            resp = json.dumps({'success': False, 'reason': str(e)})
-            self.response.out.write(resp)
+            self.response.out.write(json.dumps({'success': True, 'token': session.token}))
+        except trac.AuthenticationError as e:
+            self.response.out.write(trac.trac_error_to_response(e))
 
 class Session(db.Model):
     """Models a user's login session with the following fields:
@@ -124,17 +124,17 @@ def authenticate(session):
     except ProtocolError as e:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise AuthenticationError(code=e.errcode, msg=e.errmsg)
+        raise trac.AuthenticationError(code=e.errcode, msg=e.errmsg)
     except Fault as e2:
         # if we have a problem authenticating, let's clean the session out
         cleanup_session(session)
-        raise AuthenticationError(code=e2.faultCode, msg=e2.faultString)
+        raise trac.AuthenticationError(code=e2.faultCode, msg=e2.faultString)
     except ResponseError as e3:
         cleanup_session(session)
-        raise AuthenticationError(code='400', msg='Malformed Response -- server does not support RPC')
+        raise trac.AuthenticationError(code='400', msg='Malformed Response -- server does not support RPC')
     except Error as e4:
         cleanup_session(session)
-        raise AuthenticationError(code='000', msg='Unknown error -- authentication failed {0}'.format(str(e4)))
+        raise trac.AuthenticationError(code='000', msg='Unknown error -- authentication failed {0}'.format(str(e4)))
     return True
 
 
@@ -144,12 +144,3 @@ def cleanup_session(session):
         session.delete()
     except NotSavedError:
         logging.error("tried removing a session that was not saved")
-
-
-class AuthenticationError(Exception):
-    def __init__(self, code, msg):
-        self.code = code
-        self.msg = msg
-    
-    def __str__(self):
-        return str("{0}: {1}".format(self.code, self.msg))
