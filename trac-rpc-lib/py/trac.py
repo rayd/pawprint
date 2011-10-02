@@ -102,12 +102,16 @@ class TracRequestHandler(webapp.RequestHandler):
 
 
 def trac_error_to_response(err):
+    """Transforms a TracError class into a client-understandable
+    JSON string with error details"""
     return json.dumps({'success': False, 
                        'reason': {'errcode': err.code, 
                                   'errmsg' : err.msg }})
 
 
 def protocol_error_to_trac_error(pe, session):
+    """Transforms an xmlrpclib.ProtocolError into proper subclass
+    of TracError based on ProtocolError.errcode value"""
     if pe.errcode == 404:
         return ServerCannotBeFoundError(session.trac_url)
     elif pe.errcode == 401:
@@ -118,6 +122,10 @@ def protocol_error_to_trac_error(pe, session):
         return TracError(msg = "unknown protocol error: {0}".format(str(pe)))
 
 def fault_error_to_trac_error(fault):
+    """Transforms an xmlrpclib.Fault into proper subclass
+    of TracError based on Fault.faultCode value. Fault types
+    are based on the info found here: 
+    http://xmlrpc-epi.sourceforge.net/specs/rfc.fault_codes.php"""
     if fault.faultCode == xmlrpclib.NOT_WELLFORMED_ERROR:
         return BadlyFormedRequestError(fault.faultString)
     elif fault.faultCode == xmlrpclib.UNSUPPORTED_ENCODING:
@@ -139,6 +147,7 @@ def fault_error_to_trac_error(fault):
 ## Error raised by the Trac RPC lib
 ##
 class TracError(Exception):
+    """Base error class that all Trac errors should inherit from"""
     def __init__(self, code=999, msg):
         self.code = code
         self.msg = msg
@@ -171,8 +180,8 @@ class DoesNotSupportRPCError(TracError):
 
 
 ## Exceptions mapping to specific fault errors defined in xmlrpclib
-
 class TracFaultError(TracError):
+    """General Fault error of which there are many subclasses"""
     def __init__(self, code=998, msg):
         TracError.__init__(self, code, "fault -- {0}".format(msg))
 
