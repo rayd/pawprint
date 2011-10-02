@@ -44,11 +44,17 @@ def remove_proxy(session):
 
 class TracRequestHandler(webapp.RequestHandler):
     def handle(self, proxy):
-        """All Trac Request classes need to implement this -- they should 
-        write out to the response if there's a success or raise a TracError instance
-        if something goes wrong with the request"""
+        """All Trac Request classes MUST implement this -- they should 
+        write out to the response if request is successful or raise a TracError 
+        instance if something goes wrong with the request"""
         raise NotImplementedError("all Trac Request classes need to implement this")
     
+    def caught_error(self, err):
+        """This method SHOULD be implemented by subclasses of TracRequestHandler
+        so they can deal with error that occur during the processing of the
+        Trac request"""
+        pass
+        
     def post(self):
         """Takes care of basic process of handling a TracRequest. Most subclasses of
         this class shouldn't have to override the post() method
@@ -76,17 +82,23 @@ class TracRequestHandler(webapp.RequestHandler):
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
             logging.warn("error handling Trac request: {0}", str(te))
+            self.caught_error(te)
         except ResponseError as re:
             self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(session.trac_url)))
             logging.warn("error handling Trac request -- bad response: {0}", str(re))
+            self.caught_error(re)
         except ProtocolError as pe:
             self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe, session)))
             logging.warn("error handling Trac request -- protocol error: {0}".format(str(pe)))
+            self.caught_error(pe)
         except Fault as f:
             self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
+            logging.warn("error handling Trac request -- fault: {0}".format(str(f)))
+            self.caught_error(f)
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
             logging.error("error handling Trac request: {0}", str(e))
+            self.caught_error(e)
 
 
 def trac_error_to_response(err):
