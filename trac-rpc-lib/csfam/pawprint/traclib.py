@@ -1,12 +1,104 @@
-import logging
+from datetime import datetime, timedelta
+from google.appengine.ext import db
+from urlparse import urlunparse, urlparse
+from uuid import uuid4
+from xmlrpclib import ServerProxy
 import json
+import logging
 import xmlrpclib
-from auth import Session
-from google.appengine.ext import webapp
-from xmlrpclib import ServerProxy, ResponseError, ProtocolError, Fault
-from urlparse import urlparse, urlunparse
 
+# token duration in seconds
+TOKEN_DURATION = 60
+
+# dict storing ServerProxy objects associated with a user's token/session 
 stored_proxies = dict()
+
+class Session(db.Model):
+    """Models a user's login session with the following fields:
+        - token
+        - username
+        - password
+        - trac_url
+        - expiry
+    """
+    token = db.StringProperty(required=True)
+    trac_url = db.StringProperty(required=True)
+    username = db.StringProperty(required=True)
+    password = db.StringProperty(required=True)
+    expiry = db.DateTimeProperty(required=True)
+
+
+def session_group_key(url):
+    """Constructs a datastore key for a SessionGroup
+    entity with the given url"""
+    return db.Key.from_path('SessionGroup', url)
+
+    
+def user_session(url, username, password):
+    """Gets a Session object for a user/url combo from the
+    datastore or creates a new one if necessary.
+    """
+    session = Session.gql("WHERE ANCESTOR IS :key "
+                           "AND username = :user "
+                           "AND password = :pw "
+                           "AND expiry > :ex "
+                           "ORDER BY expiry DESC",
+                           key=session_group_key(url),
+                           user=username,
+                           pw=password,
+                           ex=datetime.now()).get()
+    
+    if session == None:
+        # if we don't have a valid session, authenticate 
+        # the user and create a new session
+        
+        # a token should expire after a specified amount of time
+        valid_duration = timedelta(seconds=TOKEN_DURATION)
+
+        session = Session(parent=session_group_key(url),
+                          trac_url=url,
+                          username=username,
+                          password=password,
+                          token=str(uuid4()),
+                          expiry=(datetime.now() + valid_duration))
+        session.put()
+        logging.debug("stored a new user session")
+        
+        # authenticate!
+        authenticate(session)        
+    else:
+        logging.debug("""
+            found session:
+                username: %s
+                password: %s
+                url: %s
+                token: %s
+                expiry: %s
+            """,
+            session.username,
+            session.password,
+            session.trac_url,
+            session.token,
+            session.expiry)
+
+    return session
+
+
+def authenticate(session):
+    """Authenticates the user with the information provided in the
+    Session object. Returns True if successful, otherwise throws an
+    AuthenticationError with an error code and message"""
+    proxy(session).system.getAPIVersion()
+    return True
+
+
+def cleanup_session(session):
+    remove_proxy(session)
+    try:
+        session.delete()
+    except db.NotSavedError:
+        logging.error("tried removing a session that was not saved")
+
 
 def proxy(session):
     """Gets a stored ServerProxy for this user session or
@@ -30,7 +122,7 @@ def proxy(session):
         logging.debug("transformed url: %s", url)
         proxy = ServerProxy(url)
         stored_proxies[session.token] = proxy
-    
+
     return proxy
 
 
@@ -40,65 +132,6 @@ def remove_proxy(session):
         del stored_proxies[session.token]
     except KeyError:
         logging.error("tried deleting a ServerProxy that didn't exist")
-        
-
-class TracRequestHandler(webapp.RequestHandler):
-    def handle(self, proxy):
-        """All Trac Request classes MUST implement this -- they should 
-        write out to the response if request is successful or raise a TracError 
-        instance if something goes wrong with the request"""
-        raise NotImplementedError("all Trac Request classes need to implement this")
-    
-    def caught_error(self, err):
-        """This method SHOULD be implemented by subclasses of TracRequestHandler
-        so they can deal with error that occur during the processing of the
-        Trac request"""
-        pass
-        
-    def post(self):
-        """Takes care of basic process of handling a TracRequest. Most subclasses of
-        this class shouldn't have to override the post() method
-        
-        Trac requests must be accompanied by a 'token' parameter. This is used to
-        map to a Session object which is required to make a request to the remote 
-        Trac server"""
-        
-        try:
-            token = self.request.get('token')
-            
-            if token == None:
-                raise MissingRequiredParameterError('token')
-            
-            # TODO: need to explore the implications of the "eventually consistent"
-            # datastore on this query which is not an "ancestor query" 
-            session = Session.gql("WHERE token = :t", t=token).get()
-        
-            if session == None:
-                raise SessionExpiredError(token)
-            else:
-                # if we have a good session, call the handle function
-                # of the specific implementation of the TracRequestHandler
-                self.handle(proxy(session))
-        except TracError as te:
-            self.response.out.write(trac_error_to_response(te))
-            logging.warn("error handling Trac request: {0}", str(te))
-            self.caught_error(te)
-        except ResponseError as re:
-            self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(session.trac_url)))
-            logging.warn("error handling Trac request -- bad response: {0}", str(re))
-            self.caught_error(re)
-        except ProtocolError as pe:
-            self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe, session)))
-            logging.warn("error handling Trac request -- protocol error: {0}".format(str(pe)))
-            self.caught_error(pe)
-        except Fault as f:
-            self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
-            logging.warn("error handling Trac request -- fault: {0}".format(str(f)))
-            self.caught_error(f)
-        except Exception as e:
-            self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
-            logging.error("error handling Trac request: {0}", str(e))
-            self.caught_error(e)
 
 
 def trac_error_to_response(err):
@@ -109,15 +142,16 @@ def trac_error_to_response(err):
                                   'errmsg' : err.msg }})
 
 
-def protocol_error_to_trac_error(pe, session):
+def protocol_error_to_trac_error(pe):
     """Transforms an xmlrpclib.ProtocolError into proper subclass
     of TracError based on ProtocolError.errcode value"""
     if pe.errcode == 404:
-        return ServerCannotBeFoundError(session.trac_url)
+        return ServerCannotBeFoundError(pe.url)
     elif pe.errcode == 401:
-        return AuthenticationError(session.username)
+        # parse url to get username
+        return AuthenticationError(pe.url.split(':')[0], pe.url)
     elif pe.errcode == 405:
-        return DoesNotSupportRPCError(session.trac_url)
+        return DoesNotSupportRPCError(pe.url)
     else:
         return TracError(msg = "unknown protocol error: {0}".format(str(pe)))
 
@@ -148,8 +182,8 @@ def fault_error_to_trac_error(fault):
 ##
 class TracError(Exception):
     """Base error class that all Trac errors should inherit from"""
-    def __init__(self, code=999, msg):
-        self.code = code
+    def __init__(self, code, msg):
+        self.code = code or 999
         self.msg = msg
     
     def __str__(self):
@@ -170,8 +204,8 @@ class ServerCannotBeFoundError(TracError):
 
 
 class AuthenticationError(TracError):
-    def __init__(self, user):
-        TracError.__init__(self, 337, "could not authenticate user {0}".format(user))
+    def __init__(self, user, url):
+        TracError.__init__(self, 337, "could not authenticate user '{0}' for '{1}'".format(user, url))
 
         
 class DoesNotSupportRPCError(TracError):
@@ -182,8 +216,8 @@ class DoesNotSupportRPCError(TracError):
 ## Exceptions mapping to specific fault errors defined in xmlrpclib
 class TracFaultError(TracError):
     """General Fault error of which there are many subclasses"""
-    def __init__(self, code=998, msg):
-        TracError.__init__(self, code, "fault -- {0}".format(msg))
+    def __init__(self, code, msg):
+        TracError.__init__(self, code or 998, "fault -- {0}".format(msg))
 
 
 class InvalidRPCError(TracFaultError):
