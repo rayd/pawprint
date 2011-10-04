@@ -1,11 +1,13 @@
 from csfam.pawprint.traclib import user_session, cleanup_session, \
     MissingRequiredParameterError, Session, SessionExpiredError, proxy, TracError, \
     trac_error_to_response, DoesNotSupportRPCError, protocol_error_to_trac_error, \
-    fault_error_to_trac_error
+    fault_error_to_trac_error, tickets_to_json
 from google.appengine.ext import webapp
 from xmlrpclib import ResponseError, ProtocolError, Fault
 import json
 import logging
+import xmlrpclib
+from datetime import datetime
 
 
 class TracRequestHandler(webapp.RequestHandler):
@@ -33,6 +35,7 @@ class TracRequestHandler(webapp.RequestHandler):
         Trac server"""
         
         try:
+            session = None
             token = self.request.get('token')
             
             if token == None:
@@ -40,7 +43,10 @@ class TracRequestHandler(webapp.RequestHandler):
             
             # TODO: need to explore the implications of the "eventually consistent"
             # datastore on this query which is not an "ancestor query" 
-            session = Session.gql("WHERE token = :t", t=token).get()
+            session = Session.gql("WHERE token = :t "
+                                  "AND expiry > :ex", 
+                                  t=token,
+                                  ex=datetime.now()).get()
         
             if session == None:
                 raise SessionExpiredError(token)
@@ -50,7 +56,7 @@ class TracRequestHandler(webapp.RequestHandler):
                 self.handle(proxy(session))
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
-            logging.warn("error handling Trac request: {0}", str(te))
+            logging.warn("error handling Trac request: %s", str(te))
             self.caught_error(te, session)
         except ResponseError as re:
             if session == None:
@@ -58,19 +64,19 @@ class TracRequestHandler(webapp.RequestHandler):
             else:
                 url = session.trac_url
             self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(url)))
-            logging.warn("error handling Trac request -- bad response: {0}", str(re))
+            logging.warn("error handling Trac request -- bad response: %s", str(re))
             self.caught_error(re, session)
         except ProtocolError as pe:
             self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe)))
-            logging.warn("error handling Trac request -- protocol error: {0}".format(str(pe)))
+            logging.warn("error handling Trac request -- protocol error: %s", str(pe))
             self.caught_error(pe, session)
         except Fault as f:
             self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
-            logging.warn("error handling Trac request -- fault: {0}".format(str(f)))
+            logging.warn("error handling Trac request -- fault: %s", str(f))
             self.caught_error(f, session)
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
-            logging.error("error handling Trac request: {0}", str(e))
+            logging.error("error handling Trac request: %s", str(e))
             self.caught_error(e, session)    
 
 
@@ -114,25 +120,48 @@ class LoginService(TracRequestHandler):
             self.response.out.write(json.dumps({'success': True, 'token': session.token}))
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
-            logging.warn("error handling Trac request: {0}", str(te))
+            logging.warn("error handling Trac request: %s", str(te))
             self.caught_error(te, session)
         except ResponseError as re:
             self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(url)))
-            logging.warn("error handling Trac request -- bad response: {0}", str(re))
+            logging.warn("error handling Trac request -- bad response: %s", str(re))
             self.caught_error(re, session)
         except ProtocolError as pe:
             self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe)))
-            logging.warn("error handling Trac request -- protocol error: {0}".format(str(pe)))
+            logging.warn("error handling Trac request -- protocol error: %s", str(pe))
             self.caught_error(pe, session)
         except Fault as f:
             self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
-            logging.warn("error handling Trac request -- fault: {0}".format(str(f)))
+            logging.warn("error handling Trac request -- fault: %s", str(f))
             self.caught_error(f, session)
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
-            logging.error("error handling Trac request: {0}", str(e))
+            logging.error("error handling Trac request: %s", str(e))
             self.caught_error(e, session)
 
     def caught_error(self, err, session):
         if session != None:
             cleanup_session(session)
+
+
+class GetAllTickets(TracRequestHandler):
+    """Request all tickets for this Trac -- can request a max number
+    of tickets and specify a page number for paged results
+    
+    Parameters:
+      max - a number representing the max number of results to get
+      page - a number specifying which page to grab
+    """
+    def handle(self, proxy):
+        # if no max given, then use zero to set no limit
+        m = self.request.get('max') or 0 
+        # if no page given, then use 1 as page
+        p = self.request.get('page') or 1
+        logging.info('requesting all tickets with max=%s and page=%s', m, p)
+        query = 'max={m}&page={p}'.format(m=m, p=p)
+        ticketIds = proxy.ticket.query(query)
+        multicall = xmlrpclib.MultiCall(proxy)
+        for ticketId in ticketIds:
+            multicall.ticket.get(ticketId)
+            
+        self.response.out.write(tickets_to_json(multicall()))

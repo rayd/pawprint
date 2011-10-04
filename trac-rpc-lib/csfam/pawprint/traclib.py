@@ -8,7 +8,7 @@ import logging
 import xmlrpclib
 
 # token duration in seconds
-TOKEN_DURATION = 60
+TOKEN_DURATION = 60*60*12
 
 # dict storing ServerProxy objects associated with a user's token/session 
 stored_proxies = dict()
@@ -120,7 +120,7 @@ def proxy(session):
                           url_parts.query,
                           url_parts.fragment))
         logging.debug("transformed url: %s", url)
-        proxy = ServerProxy(url)
+        proxy = ServerProxy(url, allow_none=True)
         stored_proxies[session.token] = proxy
 
     return proxy
@@ -133,6 +133,32 @@ def remove_proxy(session):
     except KeyError:
         logging.error("tried deleting a ServerProxy that didn't exist")
 
+##
+## Trac response parsing code
+##
+
+def tickets_to_json(tickets):
+    """Transforms an iterable containing a set of tickets into 
+    a JSON representation of that set of tickets
+    
+    Requires that it is passed an interable, not a lone ticket object.
+    If there's only one ticket, just wrap it in [ ]
+    """
+    ticket_arr = []
+    for ticket in tickets:
+        # put the ticket id into the ticket attributes obj
+        ticket[3]['id'] = ticket[0]
+        ticket = ticket[3]
+        # transform times to ISO 8601 
+        ticket['time'] = "{time}Z".format(time=str(ticket['time']))
+        ticket['changetime'] = "{time}Z".format(time=str(ticket['changetime']))
+        ticket_arr.append(ticket)
+    
+    return json.dumps(ticket_arr)
+
+##
+## Error-related code
+##
 
 def trac_error_to_response(err):
     """Transforms a TracError class into a client-understandable
@@ -182,8 +208,8 @@ def fault_error_to_trac_error(fault):
 ##
 class TracError(Exception):
     """Base error class that all Trac errors should inherit from"""
-    def __init__(self, code, msg):
-        self.code = code or 999
+    def __init__(self, code = 999, msg = "unknown error"):
+        self.code = code
         self.msg = msg
     
     def __str__(self):
@@ -216,8 +242,8 @@ class DoesNotSupportRPCError(TracError):
 ## Exceptions mapping to specific fault errors defined in xmlrpclib
 class TracFaultError(TracError):
     """General Fault error of which there are many subclasses"""
-    def __init__(self, code, msg):
-        TracError.__init__(self, code or 998, "fault -- {0}".format(msg))
+    def __init__(self, code = 998, msg = "unknown error"):
+        TracError.__init__(self, code, "fault -- {0}".format(msg))
 
 
 class InvalidRPCError(TracFaultError):

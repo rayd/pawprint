@@ -1,9 +1,10 @@
-from csfam.pawprint.handlers import LoginService
+from csfam.pawprint.handlers import LoginService, GetAllTickets
 from google.appengine.ext import webapp
 from google.appengine.ext.webapp.util import run_wsgi_app
 
 application = webapp.WSGIApplication([
-    ('/login', LoginService)
+    ('/login', LoginService),
+    ('/ticket/getAll', GetAllTickets)
 ], debug=True)
 
 def main():

@@ -11,6 +11,11 @@ indexes:
 # your application using appcfg.py.
 
 - kind: Session
+  properties:
+  - name: token
+  - name: expiry
+
+- kind: Session
   ancestor: yes
   properties:
   - name: password
