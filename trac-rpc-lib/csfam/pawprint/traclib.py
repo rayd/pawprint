@@ -104,8 +104,9 @@ def proxy(session):
     """Gets a stored ServerProxy for this user session or
     creates a new one, stores it in the dict, and returns it"""
     token = session.token
-    proxy = stored_proxies.get(token)
-    if proxy == None:
+    if stored_proxies.has_key(token):
+        return stored_proxies[token]
+    else:
         logging.debug("original url: %s", session.trac_url)
         url_parts = urlparse(session.trac_url)
         auth_info = "{0}:{1}@".format(session.username, session.password)
@@ -120,10 +121,9 @@ def proxy(session):
                           url_parts.query,
                           url_parts.fragment))
         logging.debug("transformed url: %s", url)
-        proxy = ServerProxy(url, allow_none=True)
-        stored_proxies[session.token] = proxy
-
-    return proxy
+        p = ServerProxy(url, allow_none=True)
+        stored_proxies[session.token] = p
+        return p
 
 
 def remove_proxy(session):
@@ -131,7 +131,7 @@ def remove_proxy(session):
     try:
         del stored_proxies[session.token]
     except KeyError:
-        logging.error("tried deleting a ServerProxy that didn't exist")
+        logging.exception("tried deleting a ServerProxy that didn't exist")
 
 ##
 ## Trac response parsing code

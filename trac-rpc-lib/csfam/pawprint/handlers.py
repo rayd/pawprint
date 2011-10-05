@@ -56,7 +56,7 @@ class TracRequestHandler(webapp.RequestHandler):
                 self.handle(proxy(session))
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
-            logging.warn("error handling Trac request: %s", str(te))
+            logging.exception("error handling Trac request: %s", str(te))
             self.caught_error(te, session)
         except ResponseError as re:
             if session == None:
@@ -64,19 +64,19 @@ class TracRequestHandler(webapp.RequestHandler):
             else:
                 url = session.trac_url
             self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(url)))
-            logging.warn("error handling Trac request -- bad response: %s", str(re))
+            logging.exception("error handling Trac request -- bad response: %s", str(re))
             self.caught_error(re, session)
         except ProtocolError as pe:
             self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe)))
-            logging.warn("error handling Trac request -- protocol error: %s", str(pe))
+            logging.exception("error handling Trac request -- protocol error: %s", str(pe))
             self.caught_error(pe, session)
         except Fault as f:
             self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
-            logging.warn("error handling Trac request -- fault: %s", str(f))
+            logging.exception("error handling Trac request -- fault: %s", str(f))
             self.caught_error(f, session)
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
-            logging.error("error handling Trac request: %s", str(e))
+            logging.exception("error handling Trac request: %s", str(e))
             self.caught_error(e, session)    
 
 
@@ -120,23 +120,23 @@ class LoginService(TracRequestHandler):
             self.response.out.write(json.dumps({'success': True, 'token': session.token}))
         except TracError as te:
             self.response.out.write(trac_error_to_response(te))
-            logging.warn("error handling Trac request: %s", str(te))
+            logging.exception("error handling Trac request: %s", str(te))
             self.caught_error(te, session)
         except ResponseError as re:
             self.response.out.write(trac_error_to_response(DoesNotSupportRPCError(url)))
-            logging.warn("error handling Trac request -- bad response: %s", str(re))
+            logging.exception("error handling Trac request -- bad response: %s", str(re))
             self.caught_error(re, session)
         except ProtocolError as pe:
             self.response.out.write(trac_error_to_response(protocol_error_to_trac_error(pe)))
-            logging.warn("error handling Trac request -- protocol error: %s", str(pe))
+            logging.exception("error handling Trac request -- protocol error: %s", str(pe))
             self.caught_error(pe, session)
         except Fault as f:
             self.response.out.write(trac_error_to_response(fault_error_to_trac_error(f)))
-            logging.warn("error handling Trac request -- fault: %s", str(f))
+            logging.exception("error handling Trac request -- fault: %s", str(f))
             self.caught_error(f, session)
         except Exception as e:
             self.response.out.write(trac_error_to_response(TracError(msg = "unknown error: {0}".format(str(e)))))
-            logging.error("error handling Trac request: %s", str(e))
+            logging.exception("error handling Trac request: %s", str(e))
             self.caught_error(e, session)
 
     def caught_error(self, err, session):
@@ -146,7 +146,7 @@ class LoginService(TracRequestHandler):
 
 class GetAllTickets(TracRequestHandler):
     """Request all tickets for this Trac -- can request a max number
-    of tickets and specify a page number for paged results
+    of tickets (per page) and specify a page number for paged results
     
     Parameters:
       max - a number representing the max number of results to get
@@ -157,11 +157,18 @@ class GetAllTickets(TracRequestHandler):
         m = self.request.get('max') or 0 
         # if no page given, then use 1 as page
         p = self.request.get('page') or 1
-        logging.info('requesting all tickets with max=%s and page=%s', m, p)
+        logging.error('requesting all tickets with max=%s and page=%s', m, p)
         query = 'max={m}&page={p}'.format(m=m, p=p)
         ticketIds = proxy.ticket.query(query)
         multicall = xmlrpclib.MultiCall(proxy)
+
         for ticketId in ticketIds:
+            logging.error('TICKETID: %s', ticketId)
             multicall.ticket.get(ticketId)
-            
-        self.response.out.write(tickets_to_json(multicall()))
+        
+        tickets = multicall()
+        
+        if tickets == None:
+            self.response.out.write('[]')
+        else:
+            self.response.out.write(tickets_to_json(tickets))
