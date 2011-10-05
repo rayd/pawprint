@@ -152,6 +152,14 @@ class GetTicketTypes(TracRequestHandler):
         self.response.out.write(generate_success_response(proxy.ticket.type.getAll()))
 
 
+class GetTicketStates(TracRequestHandler):
+    """Gets a list of the different states that a ticket can
+    have in this Trac system
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.status.getAll()))
+    
+
 class GetAllTickets(TracRequestHandler):
     """Request all tickets for this Trac -- can request a max number
     of tickets (per page) and specify a page number for paged results
