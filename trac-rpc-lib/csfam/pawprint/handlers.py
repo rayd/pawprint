@@ -1,7 +1,7 @@
 from csfam.pawprint.traclib import user_session, cleanup_session, \
     MissingRequiredParameterError, Session, SessionExpiredError, proxy, TracError, \
     trac_error_to_response, DoesNotSupportRPCError, protocol_error_to_trac_error, \
-    fault_error_to_trac_error, tickets_to_json
+    fault_error_to_trac_error, tickets_to_struct, generate_success_response
 from google.appengine.ext import webapp
 from xmlrpclib import ResponseError, ProtocolError, Fault
 import json
@@ -144,6 +144,14 @@ class LoginService(TracRequestHandler):
             cleanup_session(session)
 
 
+class GetTicketTypes(TracRequestHandler):
+    """Gets a list of the different types of tickets the Trac 
+    system can have
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.type.getAll()))
+
+
 class GetAllTickets(TracRequestHandler):
     """Request all tickets for this Trac -- can request a max number
     of tickets (per page) and specify a page number for paged results
@@ -157,13 +165,11 @@ class GetAllTickets(TracRequestHandler):
         m = self.request.get('max') or 0 
         # if no page given, then use 1 as page
         p = self.request.get('page') or 1
-        logging.error('requesting all tickets with max=%s and page=%s', m, p)
         query = 'max={m}&page={p}'.format(m=m, p=p)
         ticketIds = proxy.ticket.query(query)
         multicall = xmlrpclib.MultiCall(proxy)
 
         for ticketId in ticketIds:
-            logging.error('TICKETID: %s', ticketId)
             multicall.ticket.get(ticketId)
         
         tickets = multicall()
@@ -171,4 +177,4 @@ class GetAllTickets(TracRequestHandler):
         if tickets == None:
             self.response.out.write('[]')
         else:
-            self.response.out.write(tickets_to_json(tickets))
+            self.response.out.write(generate_success_response(tickets_to_struct(tickets)))

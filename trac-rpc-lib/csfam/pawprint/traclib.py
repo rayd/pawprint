@@ -134,12 +134,21 @@ def remove_proxy(session):
         logging.exception("tried deleting a ServerProxy that didn't exist")
 
 ##
-## Trac response parsing code
+## Trac response writing & parsing code
 ##
 
-def tickets_to_json(tickets):
+def generate_success_response(struct):
+    """Generates a standard response structure:
+    { "successs" : true,
+      "result" : <object representing result>
+    }
+    """
+    return json.dumps({ "success" : True, "result" : struct })
+
+
+def tickets_to_struct(tickets):
     """Transforms an iterable containing a set of tickets into 
-    a JSON representation of that set of tickets
+    a structure that can easily be written into JSON
     
     Requires that it is passed an interable, not a lone ticket object.
     If there's only one ticket, just wrap it in [ ]
@@ -154,7 +163,7 @@ def tickets_to_json(tickets):
         ticket['changetime'] = "{time}Z".format(time=str(ticket['changetime']))
         ticket_arr.append(ticket)
     
-    return json.dumps(ticket_arr)
+    return ticket_arr
 
 ##
 ## Error-related code
