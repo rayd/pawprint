@@ -158,7 +158,53 @@ class GetTicketStates(TracRequestHandler):
     """
     def handle(self, proxy):
         self.response.out.write(generate_success_response(proxy.ticket.status.getAll()))
-    
+
+
+class GetTicketVersions(TracRequestHandler):
+    """Gets a list of all the ticket version names that a
+    ticket can have in this Trac system 
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.version.getAll()))
+
+
+class GetTicketSeverities(TracRequestHandler):
+    """Gets a list of all ticket serverity names that a 
+    ticket can have in this Trac system
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.severity.getAll()))
+
+
+class GetTicketResolutions(TracRequestHandler):
+    """Gets a list of all ticket resolution names that a 
+    ticket can have in this Trac system
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.resolution.getAll()))
+
+
+class GetTicketPriorities(TracRequestHandler):
+    """Gets a list of all ticket priority names that a 
+    ticket can have in this Trac system
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.priority.getAll()))
+
+
+class GetMilestones(TracRequestHandler):
+    """Gets a list of all milestone names in this Trac system
+    """    
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.milestone.getAll()))
+
+
+class GetComponents(TracRequestHandler):
+    """Gets a list of all component names
+    """
+    def handle(self, proxy):
+        self.response.out.write(generate_success_response(proxy.ticket.component.getAll()))
+
 
 class GetAllTickets(TracRequestHandler):
     """Request all tickets for this Trac -- can request a max number
